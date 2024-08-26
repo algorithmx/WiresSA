@@ -28,25 +28,30 @@
 
     <div id="scene1"></div>
     <div id="scene2"></div>
+    <div id="simulationInfo" style="position: fixed; bottom: 5px; left: 5px; background-color: rgba(255, 255, 255, 0.8); padding: 5px; border-radius: 5px; font-size: 10px;">
+        <p>Simulation ID: <span id="simId"></span></p>
+        <p>Current Energy: <span id="currentEnergy"></span></p>
+        <p>Temperature: <span id="temperature"></span></p>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
-        const Npoints = 60;
-        const a0 = 3.0; 
+        const Npoints = 100;
+        const a0 = 2.0; 
         // Create L-shaped wires
         const wireTypes = [
             { 
-                length1: 4*a0, length2: 12*a0, 
-                angle1: Math.PI * 3 / 7, angle2: Math.PI / 7, 
+                length1: 5*a0, length2: 64*a0, 
+                angle1: Math.PI / 2 , angle2: 0, 
                 projectedLength: 0, color: 0x00ff00 }, // Green
             { 
-                length1: 4.5*a0, length2: 12*a0, 
-                angle1: Math.PI / 2, angle2: Math.PI / 9, 
-                projectedLength: 0, color: 0x0000ff }, // Blue
+                length1: 6.25*a0, length2: 64*a0, 
+                angle1: Math.PI / 2 , angle2: 0, 
+                projectedLength: 0, color: 0xff0000 }, // Blue
             { 
-                length1: 3.5*a0, length2: 10*a0, 
-                angle1: Math.PI * 2 / 5, angle2: Math.PI / 23, 
-                projectedLength: 0, color: 0xff0000 } // Red
+                length1: 7.5*a0, length2: 64*a0, 
+                angle1: Math.PI / 2 , angle2: 0, 
+                projectedLength: 0, color: 0x0000ff } // Red
         ];
         wireTypes.forEach((wireType, index) => {
             wireType.projectedLength = wireType.length1 * Math.cos(wireType.angle1) + wireType.length2 * Math.cos(wireType.angle2);
@@ -54,14 +59,30 @@
 
         const points = [];
         for (let i = 0; i < Npoints; i++) {
-            const x = a0 * (  - 0.4*Npoints) + 0.2* a0 * (Math.random() - 0.5);
-            const y = a0 * (i - 0.5*Npoints) + 1 + 0.2* a0 * (Math.random() - 0.5); 
+            const x = a0 * (  - 0.4*Npoints) + 0.04* a0 * (Math.random() - 0.5);
+            const y = a0 * (i - 0.5*Npoints) + 1 + 0.04* a0 * (Math.random() - 0.5); 
             const z = 0;
             points.push(new THREE.Vector3(x, y, z));
         }
         const neighborMap = buildNeighborMap(points, 1.9 * a0);
+        const [uppermost, lowermost] = findEdgePointIndex(points);
 
         const wireObjects = [];
+        genWires(points, wireTypes, 0.01);
+
+        function findEdgePointIndex(points) {
+            let uppermost = 0;
+            let lowermost = 0;
+            for (let i = 1; i < points.length; i++) {
+                if (points[i].y > points[uppermost].y) {
+                    uppermost = i;
+                }
+                if (points[i].y < points[lowermost].y) {
+                    lowermost = i;
+                }
+            }
+            return [uppermost, lowermost];
+        }
 
         function buildNeighborMap(points, maxDistance = 2.0) {
             const neighborMap1 = new Map();
@@ -81,7 +102,7 @@
             return neighborMap1;
         }
 
-        function createScene(containerId, position, lookAt, ang = 60) {
+        function createScene(containerId, points, position, lookAt, ang = 60) {
             W = 0.495 * window.innerWidth;
             H = 0.99 * window.innerHeight;
             const scene = new THREE.Scene();
@@ -92,13 +113,14 @@
             renderer.setSize(W, H);
             renderer.setPixelRatio(window.devicePixelRatio);
             document.getElementById(containerId).appendChild(renderer.domElement);
-
             addGrid(scene, a0 * Npoints, Npoints / 4);
             addPoints(scene, points);
-            getWires(scene, points, wireTypes);
-
             renderer.render(scene, camera);
             return { renderer, camera, scene };
+        }
+
+        function drawOnScene(scn, wires) {
+            addWires(scn, wires);    
         }
 
         function addGrid(scene, size, divisions) {
@@ -118,7 +140,7 @@
             return;
         }
 
-        function createWire(type, point) {
+        function createWire(type, point, dtheta) {
             const geometry = new THREE.BufferGeometry();
             const vertices = new Float32Array([
                 0, 0, 0,
@@ -131,7 +153,7 @@
             const material = new THREE.LineBasicMaterial({ color: type.color, linewidth: 1 });
             const line = new THREE.Line(geometry, material);
             line.position.set(point.x, point.y, point.z);
-            const randomRotation = 0.05 * (Math.random() - 0.5) * Math.PI; // Random angle between 0 and 2π
+            const randomRotation = dtheta * (Math.random() - 0.5) * Math.PI; // Random angle between 0 and 2π
             line.rotateZ(randomRotation);
             return {
                 line: line,
@@ -141,43 +163,29 @@
             };
         }
 
-        function getWires(scene, points, wireTypes) {
+        function genWires(points, wireTypes, dtheta) {
             points.forEach((p, i) => {
                 // const wireType = wireTypes[i % wireTypes.length];
-                const wireType = wireTypes[0];
-                const wire = createWire(wireType, p);
-                scene.add(wire.line);
+                const wireType = wireTypes[((i%2===0) ? 0 : 2)];
+                const wire = createWire(wireType, p, dtheta);
                 wireObjects.push(wire);
             });
         }
 
-        function updateWire(index, newType, newRotation) {
-            if (index >= 0 && index < wireObjects.length) {
-                const wire = wireObjects[index];
-                wire.type = newType;
-                wire.line.material.color.setHex(newType.color);
-                // Update geometry
-                const vertices = wire.line.geometry.attributes.position.array;
-                vertices[3] = newType.length1 * Math.cos(newType.angle1);
-                vertices[5] = newType.length1 * Math.sin(newType.angle1);
-                vertices[6] = newType.length1 * Math.cos(newType.angle1) + newType.length2 * Math.cos(newType.angle2);
-                vertices[8] = newType.length1 * Math.sin(newType.angle1) + newType.length2 * Math.sin(newType.angle2);
-                wire.line.geometry.attributes.position.needsUpdate = true;
-                // changing wire.line.rotation.z does not modify wire.line.geometry.attributes.position.array
-                wire.line.rotation.z = newRotation;
-                wire.rotation = newRotation;
-            }
+        function addWires(scene, wires) {
+            wires.forEach(wire => {
+                scene.add(wire.line);
+            });
         }
 
-        function updateWireRotation(index, r1) {
-            const wire = wireObjects[index];
+        function updateWireRotation(wire, r1) {
             wire.line.rotation.z  = r1;
             wire.rotation = r1;
         }
 
         ///////////////////////////////////////////////
         // Energy
- 
+
         function calculateWireEndPoint(wire) {
             const b = new THREE.Vector2(wire.position.x, wire.position.y);
             const angle = wire.rotation;
@@ -207,37 +215,6 @@
 
         ///////////////////////////////////////////
 
-            function distanceBetweenLineSegments3D(xs1, ys1, zs1, xe1, ye1, ze1, xs2, ys2, zs2, xe2, ye2, ze2) {
-                // Helper function to compute the distance between two points
-                function distance(x1, y1, z1, x2, y2, z2) {
-                    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2);
-                }
-            
-                // Helper function to compute the cross product of two vectors
-                function crossProduct(x1, y1, z1, x2, y2, z2) {
-                    return [
-                        y1 * z2 - z1 * y2,
-                        z1 * x2 - x1 * z2,
-                        x1 * y2 - y1 * x2
-                    ];
-                }
-            
-                // Helper function to compute the dot product of two vectors
-                function dotProduct(x1, y1, z1, x2, y2, z2) {
-                    return x1 * x2 + y1 * y2 + z1 * z2;
-                }
-            }
-            
-            // Example usage:
-            const xs1 = 0, ys1 = 0, zs1 = 0;
-            const xe1 = 1, ye1 = 0, ze1 = 0;
-            const xs2 = 0, ys2 = 1, zs2 = 0;
-            const xe2 = 1, ye2 = 1, ze2 = 0;
-            
-            console.log(distanceBetweenLineSegments3D(xs1, ys1, zs1, xe1, ye1, ze1, xs2, ys2, zs2, xe2, ye2, ze2));
-
-        ///////////////////////////////////////////
-
         function distSegToSeg(p1,p2,q1,q2) {
             const u = p2.clone().sub(p1);
             const v = q2.clone().sub(q1);
@@ -255,37 +232,46 @@
         }
 
         function pointsOnWire(wireA) {
-            const a1 = new THREE.Vector3(wireA.position.x, wireA.position.y, 0);
+            const a1 = new THREE.Vector3(0, 0, 0);
             const a2 = new THREE.Vector3(
-                a1.x + wireA.type.length1 * Math.cos(wireA.type.angle1),
-                a1.y + wireA.type.length1 * Math.sin(wireA.type.angle1),
-                0
+                wireA.type.length1 * Math.cos(wireA.type.angle1),
+                0,
+                wireA.type.length1 * Math.sin(wireA.type.angle1)
             );
             a2.applyAxisAngle(new THREE.Vector3(0, 0, 1), wireA.rotation);
             const a3 = new THREE.Vector3(
                 a2.x + wireA.type.length2 * Math.cos(wireA.type.angle2),
-                a2.y + wireA.type.length2 * Math.sin(wireA.type.angle2),
-                0
+                0,
+                a2.z + wireA.type.length2 * Math.sin(wireA.type.angle2)
             );
             a3.applyAxisAngle(new THREE.Vector3(0, 0, 1), wireA.rotation);
+            a3.add(wireA.position);
+            a2.add(wireA.position);
+            a1.add(wireA.position);
             return [a1,a2,a3];
         }
 
-        function wireRepulsion(d, dmin, PENALTY = 1000, AMP=0.0001) {
-            return d >= dmin ? AMP/(d*d) : PENALTY + PENALTY * (dmin - d);
+        function wireRepulsion(d, dmin, PENALTY = 1000) {
+            return d >= dmin ? 0 : PENALTY + PENALTY * (dmin - d);
         }
 
         function computeRepulsionByDistance(wireA, wireB, DM1, DM2, PENALTY=100) {
             const [a1,a2,a3] = pointsOnWire(wireA);
             const [b1,b2,b3] = pointsOnWire(wireB);
             return (
-                    wireRepulsion(distSegToSeg(a1, a2, b1, b2), DM1, PENALTY, 0.0001) 
-                +   wireRepulsion(distSegToSeg(a1, a2, b2, b3), DM1, PENALTY, 0.0001)
-                +   wireRepulsion(distSegToSeg(a2, a3, b1, b2), DM1, PENALTY, 0.0001) 
-                +   wireRepulsion(distSegToSeg(a2, a3, b2, b3), DM2, PENALTY, 0.0001)); 
+                    wireRepulsion(distSegToSeg(a1, a2, b1, b2), DM1, PENALTY) 
+                +   wireRepulsion(distSegToSeg(a1, a2, b2, b3), DM1, PENALTY)
+                +   wireRepulsion(distSegToSeg(a2, a3, b1, b2), DM1, PENALTY) 
+                +   wireRepulsion(distSegToSeg(a2, a3, b2, b3), DM2, PENALTY)); 
         }
 
-        function computeWireRepulsionEnergy(wires, DM1, DM2, PENALTY=1000) {
+        function calculateEdgeWirePotential(wireObjects) {
+            const theta1 = wireObjects[uppermost].rotation;
+            const theta2 = wireObjects[lowermost].rotation;
+            return theta1 * theta1 + theta2 * theta2;
+        }
+
+        function calculateWireRepulsionEnergy(DM1, DM2, PENALTY, wires) {
             let totalRepulsionEnergy = 0;
             for (let [i, neighbors] of neighborMap.entries()) {
                 const wire1 = wires[i];
@@ -310,7 +296,7 @@
             return totalElasticEnergy;
         }
 
-        function calculateOverlapEnergy(wireObjects, neighborMap) {
+        function calculateOverlapEnergy(overlapPenalty, wireObjects, neighborMap) {
             let totalOverlapEnergy = 0;
             for (let [i, neighbors] of neighborMap.entries()) {
                 const wire1 = wireObjects[i];
@@ -320,7 +306,10 @@
                     const wire2 = wireObjects[j];
                     const basePoint2 = new THREE.Vector2(wire2.position.x, wire2.position.y);
                     const endPoint2 = calculateWireEndPoint(wire2);
-                    totalOverlapEnergy += (doLinesIntersect(basePoint1, endPoint1, basePoint2, endPoint2) ? 1 : 0);
+                    if (doLinesIntersect(basePoint1, endPoint1, basePoint2, endPoint2)) {
+                        const dth = wire1.rotation - wire2.rotation;
+                        totalOverlapEnergy += overlapPenalty + overlapPenalty * dth * dth;
+                    }
                 }
             }
             return totalOverlapEnergy;
@@ -328,26 +317,31 @@
 
         function calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty,  DM1, DM2, wireObjects, neighborMap) {
             const elasticEnergy = calculateElasticEnergy(springConstant, wireObjects, neighborMap);
-            const interactionEnergy = calculateOverlapEnergy(wireObjects, neighborMap);
-            const repulsion = computeWireRepulsionEnergy(wireObjects, DM1, DM2, repulsionPenalty);
-            return elasticEnergy + overlapPenalty * interactionEnergy + repulsion;
+            const interactionEnergy = calculateOverlapEnergy(overlapPenalty, wireObjects, neighborMap);
+            const repulsion = calculateWireRepulsionEnergy(DM1, DM2, repulsionPenalty, wireObjects);
+            const edge = calculateEdgeWirePotential(wireObjects);
+            return elasticEnergy + interactionEnergy + repulsion + 10.0 * springConstant * edge;
         }
 
-        const { renderer: renderer1, camera: camera1, scene: scene1 } = createScene('scene1', [0, -120*a0, 40*a0], [0, 1, -0.2], 50);
-        const { renderer: renderer2, camera: camera2, scene: scene2 } = createScene('scene2', [0, 0, 300*a0], [0, 0, -1], 16);
+        const { renderer: renderer1, camera: camera1, scene: scene1 } = createScene('scene1', points, [0, -150*a0, 50*a0], [0, 1, -0.5], 50);
+        const { renderer: renderer2, camera: camera2, scene: scene2 } = createScene('scene2', points, [0, 0, 500*a0], [0, 0, -1], 15);
+        drawOnScene(scene1, wireObjects);
+        drawOnScene(scene2, wireObjects);
 
-        let annealingStep = 0;
         let shouldRender = false;
-
-        function update() {
+        function renderCallback(simId, currentEnergy, temperature) {
             if (shouldRender) {
                 renderer1.render(scene1, camera1);
                 renderer2.render(scene2, camera2);
                 shouldRender = false;
             }
+            // Update the textbox with simulation information
+            document.getElementById('simId').textContent = simId;
+            document.getElementById('currentEnergy').textContent = currentEnergy.toFixed(4);
+            document.getElementById('temperature').textContent = temperature.toFixed(4);
         }
 
-
+        let annealingStep = 0;
         async function simulatedAnnealing(PARAMS, wireObjects, neighborMap, dtheta = 0.01, T0 = 1000.0, coolingRate = 0.995, iterations = 1000) {
             const springConstant = PARAMS.springConstant;
             const overlapPenalty = PARAMS.overlapPenalty;
@@ -357,47 +351,79 @@
             let temperature = T0;
             let currentEnergy = calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty, DM1, DM2, wireObjects, neighborMap);
             for (let i = 0; i < iterations; i++) {
+                if (temperature < 1e-4) {
+                    break;
+                }
+                // randomly choose a site in each iteration
                 const randomWireIndex = Math.floor(Math.random() * wireObjects.length);
                 const originalRotation = wireObjects[randomWireIndex].rotation;
-                const newRotation = originalRotation + (2 * Math.random() - 1) * dtheta;
+                // random update
+                let newRotation = originalRotation + (2 * Math.random() - 1) * dtheta;
+                // fix the angle range to be (-pi, pi] 
                 if (newRotation > Math.PI) {
                     newRotation -= 2 * Math.PI;
                 }
                 if (newRotation < -Math.PI) {
                     newRotation += 2 * Math.PI;
                 }
-                updateWireRotation(randomWireIndex, newRotation);
+                // Monte Carlo, Metropolis-Hastings algorithm
+                // propose
+                updateWireRotation(wireObjects[randomWireIndex], newRotation);
                 const newEnergy = calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty, DM1, DM2, wireObjects, neighborMap);
+                // Metropolis-Hastings criterion
                 if (Math.random() < Math.exp((currentEnergy - newEnergy) / temperature)) {
-                    // accept
+                    // accept, update energy
                     currentEnergy = newEnergy;
                 } else {
-                    // rejected
-                    updateWireRotation(randomWireIndex, originalRotation);
+                    // rejected, roll back
+                    updateWireRotation(wireObjects[randomWireIndex], originalRotation);
                 }
+                // The temperature decreases exponentially with iteration
+                // You can change it to linear decreasing if you prefer
                 temperature *= coolingRate;
+                // Update the scene every 100 iterations
+                // The rest part is not essential, only for visualization purpose 
                 annealingStep++;
-                if (annealingStep % 400 === 0) {
+                if (annealingStep % 200 === 0) {
                     shouldRender = true;
-                    update();
-                    console.log("T:", temperature);
-                    console.log("E:", currentEnergy);
+                    renderCallback(annealingStep, currentEnergy, temperature);
                     await new Promise(resolve => requestAnimationFrame(resolve));
                 }
             }
+            return currentEnergy;
         }
 
         ////////////////////////////////////////////////
         // Run the simulation
         const PARAMS = {
-            springConstant: 20.0,
-            overlapPenalty: 8000,
-            repulsionPenalty: 8000,
-            DM1: 0.1*a0,
-            DM2: 0.1*a0,
+            springConstant: 100.0,
+            overlapPenalty: 80000,
+            repulsionPenalty: 40000,
+            DM1: 0.25*a0,
+            DM2: 0.25*a0,
         };
 
-        simulatedAnnealing(PARAMS, wireObjects, neighborMap, 0.05, 10000.0, 0.9999, 800000);
+        async function runSimulations(numberOfSimulations) {
+            annealingStep = 0;
+            for (let i = 0; i < numberOfSimulations; i++) {
+                const En = await simulatedAnnealing(
+                    PARAMS, 
+                    wireObjects, 
+                    neighborMap, 
+                    0.01 - i*0.008/numberOfSimulations, 
+                    1000.0 - i*800.0/numberOfSimulations, 
+                    0.9998, 
+                    400000 + 20000 * i
+                );
+                if (En < 1e-2) {
+                    break;
+                }
+            }
+        }
+
+        // Call the async function
+        runSimulations(10);
+
 
     </script>
 </body>
