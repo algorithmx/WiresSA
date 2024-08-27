@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Minimizing Wire Interaction (using Three.js)</title>
+    <title>Optimizing wire configuration using simulated annealing</title>
     <!-- License GPL v3.0
     Copyright (c) 2024, 2025
     Author: Yunlong Lian
@@ -18,7 +18,7 @@
             min-height: 100vh;
             background-color: #000;
             color: #fff;
-            font-size: 5px;
+            font-size: 14px;
         }
 
         canvas {
@@ -27,7 +27,7 @@
 
         table {
             border-collapse: collapse;
-            font-size: 5px; /* Decreased font size for table text */
+            font-size: 14px; /* Decreased font size for table text */
         }
     
         th, td {
@@ -37,8 +37,8 @@
         }
     
         input[type="number"], input[type="text"] {
-            width: 60px;
-            font-size: 5px; /* Decreased font size for input fields */
+            width: 140px;
+            font-size: 12px;
         }
 
         #background-layer {
@@ -64,13 +64,14 @@
             align-items: flex-start;
             padding: 1px;
         }
-    
+
         #inputForm, #simulationInfo {
             pointer-events: auto;
             background-color: rgba(255, 255, 255, 0.1);
             padding: 1px;
             border-radius: 1px;
             margin-bottom: 1px;
+            font-size: 14px;
         }
 
         button {
@@ -79,7 +80,7 @@
             padding: 1px;
             border-radius: 1px;
             margin-bottom: 1px;
-            font-size: 5px;
+            font-size: 14px;
         }
     
         #scene1, #scene2 {
@@ -99,7 +100,6 @@
     </div>
 
     <div id="front-layer">
-
         <form id="inputForm">
             <table>
                 <tr>
@@ -113,11 +113,11 @@
                     <th>Minimal distance 2</th>
                 </tr>
                 <tr>
-                    <td><input type="number" id="springConstant" value="100.0"></td>
-                    <td><input type="number" id="overlapPenalty" value="800000"></td>
-                    <td><input type="number" id="repulsionPenalty" value="10000"></td>
-                    <td><input type="number" id="DM1" value="0.1" step="0.1"></td>
-                    <td><input type="number" id="DM2" value="0.5" step="0.1"></td>
+                    <td><input type="number" id="springConstant" value="1000.0"></td>
+                    <td><input type="number" id="overlapPenalty" value="80000"></td>
+                    <td><input type="number" id="repulsionPenalty" value="40000"></td>
+                    <td><input type="number" id="DM1" value="0.2" step="0.05"></td>
+                    <td><input type="number" id="DM2" value="0.8" step="0.05"></td>
                 </tr>    
                 <tr>
                     <th colspan="4">Simulation Schedule</th>
@@ -129,10 +129,10 @@
                     <th>Temperature Drop Factors</th>
                 </tr>
                 <tr>
-                    <td><input type="text" id="initialTemperatures" value="10000,1000,100"></td>
-                    <td><input type="text" id="totalSteps" value="100000,50000,10000"></td>
-                    <td><input type="text" id="amplitudes" value="0.1,0.05,0.02"></td>
-                    <td><input type="text" id="dropFactors" value="0.9995,0.9998,0.99995"></td>
+                    <td><input type="text" id="initialTemperatures" value="8000,8000,8000"></td>
+                    <td><input type="text" id="totalSteps" value="500000,500000,500000"></td>
+                    <td><input type="text" id="amplitudes" value="0.05,0.05,0.02"></td>
+                    <td><input type="text" id="dropFactors" value="0.9999,0.9999,0.99995"></td>
                 </tr>
                 <tr>
                     <th colspan="3">Wire Types</th>
@@ -169,8 +169,7 @@
             <button type="button" onclick="updateSimulation()">Update Simulation</button>
         </form>    
         <button type="button" onclick="startSimulation()">Start Simulation</button>
-        <div id="simulationInfo" 
-            style="position: fixed; bottom: 5px; left: 5px; background-color: rgba(255, 255, 255, 0.8); padding: 5px; border-radius: 5px; font-size: 10px;">
+        <div id="simulationInfo" style="position: fixed; top: 5px; right: 5px">
             <p>Simulation ID: <span id="simId"></span></p>
             <p>Current Energy: <span id="currentEnergy"></span></p>
             <p>Temperature: <span id="temperature"></span></p>
@@ -184,20 +183,7 @@
         var PARAMS = extractPARAMS();
 
         // Create L-shaped wires
-        var wireTypes = [
-            { 
-                length1: 5, length2: 64, 
-                angle1: Math.PI * 54 / 180, angle2: Math.PI * 6 / 180, 
-                projectedLength: 0, color: 0x00ff00 }, // Green
-            { 
-                length1: 6.5, length2: 64, 
-                angle1: Math.PI * 54 / 180, angle2: Math.PI * 6 / 180, 
-                projectedLength: 0, color: 0xff0000 }, // Blue
-            { 
-                length1: 8, length2: 64, 
-                angle1: Math.PI * 54 / 180, angle2: Math.PI * 6 / 180, 
-                projectedLength: 0, color: 0x0000ff } // Red
-        ];
+        var wireTypes = extractWireTypes();
         wireTypes.forEach((wireType, index) => {
             wireType.projectedLength = wireType.length1 * Math.cos(wireType.angle1) + wireType.length2 * Math.cos(wireType.angle2);
         });
@@ -210,7 +196,7 @@
             points.push(new THREE.Vector3(x, y, z));
         }
         const pointMeshes = [];
-        const neighborMap = buildNeighborMap(points, 5.0);
+        const neighborMap = buildNeighborMap(points, 1.8);
         const [uppermost, lowermost] = findEdgePointIndex(points);
         const wireObjects = [];
 
@@ -242,6 +228,7 @@
         }
         
         function findEdgePointIndex(points) {
+            // find the index for the uppermost and lowermost points
             let uppermost = 0;
             let lowermost = 0;
             for (let i = 1; i < points.length; i++) {
@@ -295,10 +282,11 @@
         }
 
         function addPoints(scene, points, sz = 0.8, add_to_mesh = false) {
-            const pointGeometry = new THREE.SphereGeometry(sz, 16, 16);
-            const pointMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
             points.forEach(point => {
-                const mesh = new THREE.Mesh(pointGeometry, pointMaterial);
+                const mesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(sz, 16, 16), 
+                    new THREE.MeshBasicMaterial({ color: 0xffffff })
+                );
                 mesh.position.set(point.x, point.y, point.z);
                 scene.add(mesh);
                 if (add_to_mesh) {
@@ -316,31 +304,32 @@
                 0,
                 type.length1 * Math.sin(type.angle1) + type.length2 * Math.sin(type.angle2),
             ]);
-            const randomRotation = dtheta * (Math.random() - 0.5) * Math.PI; // Random angle between 0 and 2π
+            // const randomRotation = dtheta * (Math.random() - 0.5) * Math.PI; // Random angle between 0 and 2π
             const geometry1 = new THREE.BufferGeometry();
             geometry1.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
             const line1 = new THREE.Line(geometry1, new THREE.LineBasicMaterial({ color: type.color, linewidth: 1 }));
             line1.position.set(point.x, point.y, point.z);
-            line1.rotateZ(randomRotation);
+            line1.rotateZ(dtheta);
             const geometry2 = new THREE.BufferGeometry();
             geometry2.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
             const line2 = new THREE.Line(geometry2, new THREE.LineBasicMaterial({ color: type.color, linewidth: 1 }));
             line2.position.set(point.x, point.y, point.z);
-            line2.rotateZ(randomRotation);
+            line2.rotateZ(dtheta);
             return {
                 line1: line1,
                 line2: line2,
                 type: type,
-                rotation: randomRotation,
+                rotation: dtheta,
                 position: point.clone()
             };
         }
 
         function genWires(points, wireTypes, dtheta) {
+            const Np = points.length;
             points.forEach((p, i) => {
                 // const wireType = wireTypes[i % wireTypes.length];
                 const wireType = wireTypes[((i%2===0) ? 0 : 2)];
-                const wire = createWire(wireType, p, dtheta);
+                const wire = createWire(wireType, p, dtheta * (i - 0.5 * Np));
                 wireObjects.push(wire);
             });
         }
@@ -360,19 +349,19 @@
 
         function updatePointColor(meshes, i, c) {
             const x = 0.999 * Math.min(c, 1);
-            meshes[i].material.color.setRGB(1-x, 0, x); // Blue (cold) to Red (hot)
+            meshes[i].material.color.setRGB(x, 0, 1-x); // Blue (cold) to Red (hot)
+            meshes[i].material.size = 0.8 * (1-x) + 0.4;
+            meshes[i].material.needsUpdate = true;
         }
 
         ///////////////////////////////////////////////
         // Energy
 
         function calculateWireEndPoint(wire) {
-            const b = new THREE.Vector2(wire.position.x, wire.position.y);
-            const angle = wire.rotation;
             const length = wire.type.projectedLength;
             return new THREE.Vector2(
-                b.x + length * Math.cos(angle),
-                b.y + length * Math.sin(angle)
+                wire.position.x + length * Math.cos(wire.rotation),
+                wire.position.y + length * Math.sin(wire.rotation)
             );
         }
         
@@ -432,10 +421,10 @@
         }
 
         function wireRepulsion(d, dmin, PENALTY = 1000) {
-            return d >= dmin ? 0 : PENALTY + PENALTY * (dmin - d);
+            return d >= dmin ? 1.0/(1.0 + d*d) : PENALTY + PENALTY * (dmin - d) * (dmin - d);
         }
 
-        function computeRepulsionByDistance(wireA, wireB, DM1, DM2, PENALTY=100) {
+        function computeRepulsionByDistance(wireA, wireB, DM1, DM2, PENALTY=1000) {
             const [a1,a2,a3] = pointsOnWire(wireA);
             const [b1,b2,b3] = pointsOnWire(wireB);
             return (
@@ -480,11 +469,11 @@
             let totalOverlapEnergy = 0;
             for (let [i, neighbors] of neighborMap.entries()) {
                 const wire1 = wireObjects[i];
-                const basePoint1 = new THREE.Vector2(wire1.position.x, wire1.position.y);
+                const basePoint1 = wire1.position;
                 const endPoint1 = calculateWireEndPoint(wire1);
                 for (let j of neighbors) {
                     const wire2 = wireObjects[j];
-                    const basePoint2 = new THREE.Vector2(wire2.position.x, wire2.position.y);
+                    const basePoint2 = wire2.position;
                     const endPoint2 = calculateWireEndPoint(wire2);
                     if (doLinesIntersect(basePoint1, endPoint1, basePoint2, endPoint2)) {
                         const dth = wire1.rotation - wire2.rotation;
@@ -533,11 +522,12 @@
             if (shouldRender) {
                 // Calculate interaction energies for all wires
                 const interactionEnergies = wireObjects.map((_, index) => 
-                    calculateWireInteractionEnergy(index, wireObjects, neighborMap, PARAMS)
+                    Math.log(1 + calculateWireInteractionEnergy(index, wireObjects, neighborMap, PARAMS))
                 );
                 const maxEnergy = Math.max(...interactionEnergies);
                 for (let i = 0; i < wireObjects.length; i++) {
-                    updatePointColor(pointMeshes, i, interactionEnergies[i]/maxEnergy);
+                    const v = interactionEnergies[i] / maxEnergy;
+                    updatePointColor(pointMeshes, i, v);
                 }
                 A1.renderer.render(A1.scene, A1.camera);
                 A2.renderer.render(A2.scene, A2.camera);
@@ -560,7 +550,7 @@
             let temperature = T0;
             let currentEnergy = calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty, DM1, DM2, wireObjects, neighborMap);
             for (let i = 0; i < iterations; i++) {
-                if (temperature < 1e-20) {
+                if (temperature < 1e-8) {
                     break;
                 }
                 // randomly choose a site in each iteration
@@ -656,7 +646,7 @@
             wireTypes = extractWireTypes();
             // Regenerate wires and restart simulation
             wireObjects.length = 0;
-            genWires(points, wireTypes, 0.01);
+            genWires(points, wireTypes, 0.005 * Math.PI);
             //
             clearScene(A1.scene);
             clearScene(A2.scene);
