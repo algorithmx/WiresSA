@@ -12,45 +12,190 @@
         body {
             margin: 0;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            min-height: 100vh;
             background-color: #000;
+            color: #fff;
+            font-size: 5px;
         }
 
         canvas {
             display: block;
         }
+
+        table {
+            border-collapse: collapse;
+            font-size: 5px; /* Decreased font size for table text */
+        }
+    
+        th, td {
+            border: 1px solid #fff;
+            padding: 1px;
+            text-align: left;
+        }
+    
+        input[type="number"], input[type="text"] {
+            width: 60px;
+            font-size: 5px; /* Decreased font size for input fields */
+        }
+
+        #background-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+    
+        #front-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: flex-start;
+            padding: 1px;
+        }
+    
+        #inputForm, #simulationInfo {
+            pointer-events: auto;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 1px;
+            border-radius: 1px;
+            margin-bottom: 1px;
+        }
+
+        button {
+            pointer-events: auto;
+            background-color: rgba(211, 212, 126, 0.582);
+            padding: 1px;
+            border-radius: 1px;
+            margin-bottom: 1px;
+            font-size: 5px;
+        }
+    
+        #scene1, #scene2 {
+            display: inline-block;
+            width: 49.5%;
+            height: 100%;
+        }
+
     </style>
 </head>
 
 <body>
 
-    <div id="scene1"></div>
-    <div id="scene2"></div>
-    <div id="simulationInfo" style="position: fixed; bottom: 5px; left: 5px; background-color: rgba(255, 255, 255, 0.8); padding: 5px; border-radius: 5px; font-size: 10px;">
-        <p>Simulation ID: <span id="simId"></span></p>
-        <p>Current Energy: <span id="currentEnergy"></span></p>
-        <p>Temperature: <span id="temperature"></span></p>
+    <div id="background-layer">
+        <div id="scene1"></div>
+        <div id="scene2"></div>
+    </div>
+
+    <div id="front-layer">
+
+        <form id="inputForm">
+            <table>
+                <tr>
+                    <th colspan="8">Simulation Parameters</th>
+                </tr>
+                <tr>
+                    <th>Spring Constant</th>
+                    <th>XY-Projection Overlap Penalty</th>
+                    <th>Wire Repulsion Penalty</th>
+                    <th>Minimal distance 1</th>
+                    <th>Minimal distance 2</th>
+                </tr>
+                <tr>
+                    <td><input type="number" id="springConstant" value="100.0"></td>
+                    <td><input type="number" id="overlapPenalty" value="800000"></td>
+                    <td><input type="number" id="repulsionPenalty" value="10000"></td>
+                    <td><input type="number" id="DM1" value="0.1" step="0.1"></td>
+                    <td><input type="number" id="DM2" value="0.5" step="0.1"></td>
+                </tr>    
+                <tr>
+                    <th colspan="4">Simulation Schedule</th>
+                </tr>
+                <tr>
+                    <th>Initial Temperatures</th>
+                    <th>Total Steps</th>
+                    <th>Amplitudes</th>
+                    <th>Temperature Drop Factors</th>
+                </tr>
+                <tr>
+                    <td><input type="text" id="initialTemperatures" value="10000,1000,100"></td>
+                    <td><input type="text" id="totalSteps" value="100000,50000,10000"></td>
+                    <td><input type="text" id="amplitudes" value="0.1,0.05,0.02"></td>
+                    <td><input type="text" id="dropFactors" value="0.9995,0.9998,0.99995"></td>
+                </tr>
+                <tr>
+                    <th colspan="3">Wire Types</th>
+                </tr>
+                <tr>
+                    <th>Type</th>
+                    <th>Length 1</th>
+                    <th>Length 2</th>
+                    <th>Angle 1 (deg)</th>
+                    <th>Angle 2 (deg)</th>
+                </tr>
+                <tr>
+                    <td>Green</td>
+                    <td><input type="number" id="greenLength1" value="5"></td>
+                    <td><input type="number" id="greenLength2" value="60"></td>
+                    <td><input type="number" id="greenAngle1" value="54"></td>
+                    <td><input type="number" id="greenAngle2" value="6"></td>
+                </tr>
+                <tr>
+                    <td>Red</td>
+                    <td><input type="number" id="redLength1" value="7"></td>
+                    <td><input type="number" id="redLength2" value="60"></td>
+                    <td><input type="number" id="redAngle1" value="54"></td>
+                    <td><input type="number" id="redAngle2" value="6"></td>
+                </tr>
+                <tr>
+                    <td>Blue</td>
+                    <td><input type="number" id="blueLength1" value="9"></td>
+                    <td><input type="number" id="blueLength2" value="60"></td>
+                    <td><input type="number" id="blueAngle1" value="54"></td>
+                    <td><input type="number" id="blueAngle2" value="6"></td>
+                </tr>
+            </table>
+            <button type="button" onclick="updateSimulation()">Update Simulation</button>
+        </form>    
+        <button type="button" onclick="startSimulation()">Start Simulation</button>
+        <div id="simulationInfo" 
+            style="position: fixed; bottom: 5px; left: 5px; background-color: rgba(255, 255, 255, 0.8); padding: 5px; border-radius: 5px; font-size: 10px;">
+            <p>Simulation ID: <span id="simId"></span></p>
+            <p>Current Energy: <span id="currentEnergy"></span></p>
+            <p>Temperature: <span id="temperature"></span></p>
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         const Npoints = 100;
-        const a0 = 2.0; 
+        var schedule = extractSimulationSchedule();
+        var PARAMS = extractPARAMS();
+
         // Create L-shaped wires
-        const wireTypes = [
+        var wireTypes = [
             { 
-                length1: 5*a0, length2: 64*a0, 
-                angle1: Math.PI / 2 , angle2: 0, 
+                length1: 5, length2: 64, 
+                angle1: Math.PI * 54 / 180, angle2: Math.PI * 6 / 180, 
                 projectedLength: 0, color: 0x00ff00 }, // Green
             { 
-                length1: 6.25*a0, length2: 64*a0, 
-                angle1: Math.PI / 2 , angle2: 0, 
+                length1: 6.5, length2: 64, 
+                angle1: Math.PI * 54 / 180, angle2: Math.PI * 6 / 180, 
                 projectedLength: 0, color: 0xff0000 }, // Blue
             { 
-                length1: 7.5*a0, length2: 64*a0, 
-                angle1: Math.PI / 2 , angle2: 0, 
+                length1: 8, length2: 64, 
+                angle1: Math.PI * 54 / 180, angle2: Math.PI * 6 / 180, 
                 projectedLength: 0, color: 0x0000ff } // Red
         ];
         wireTypes.forEach((wireType, index) => {
@@ -59,17 +204,43 @@
 
         const points = [];
         for (let i = 0; i < Npoints; i++) {
-            const x = a0 * (  - 0.4*Npoints) + 0.04* a0 * (Math.random() - 0.5);
-            const y = a0 * (i - 0.5*Npoints) + 1 + 0.04* a0 * (Math.random() - 0.5); 
+            const x = (  - 0.4*Npoints) + 0.04*(Math.random() - 0.5);
+            const y = (i - 0.5*Npoints) + 1 + 0.04*(Math.random() - 0.5); 
             const z = 0;
             points.push(new THREE.Vector3(x, y, z));
         }
-        const neighborMap = buildNeighborMap(points, 1.9 * a0);
+        const pointMeshes = [];
+        const neighborMap = buildNeighborMap(points, 5.0);
         const [uppermost, lowermost] = findEdgePointIndex(points);
-
         const wireObjects = [];
-        genWires(points, wireTypes, 0.01);
 
+        function extractPARAMS() {
+            return {
+                springConstant : parseFloat(document.getElementById('springConstant').value),
+                overlapPenalty : parseFloat(document.getElementById('overlapPenalty').value),
+                repulsionPenalty : parseFloat(document.getElementById('repulsionPenalty').value),
+                DM1 : parseFloat(document.getElementById('DM1').value),
+                DM2 : parseFloat(document.getElementById('DM2').value)
+            };
+        }
+
+        function extractSimulationSchedule() {
+            const temperatures = document.getElementById('initialTemperatures').value.split(',').map(Number);
+            const steps = document.getElementById('totalSteps').value.split(',').map(Number);
+            const amplitudes = document.getElementById('amplitudes').value.split(',').map(Number);
+            const drop = document.getElementById('dropFactors').value.split(',').map(Number);
+            const maxLength = Math.max(temperatures.length, steps.length, amplitudes.length, drop.length);
+            const schedule = {
+                temperatures: temperatures.concat(Array(maxLength - temperatures.length).fill(temperatures[temperatures.length - 1])),
+                steps: steps.concat(Array(maxLength - steps.length).fill(steps[steps.length - 1])),
+                amplitudes: amplitudes.concat(Array(maxLength - amplitudes.length).fill(amplitudes[amplitudes.length - 1])),
+                drop: drop.concat(Array(maxLength - drop.length).fill(drop[drop.length - 1]))
+            };
+            console.log("schedule:");
+            console.log(schedule);
+            return schedule;
+        }
+        
         function findEdgePointIndex(points) {
             let uppermost = 0;
             let lowermost = 0;
@@ -113,14 +284,8 @@
             renderer.setSize(W, H);
             renderer.setPixelRatio(window.devicePixelRatio);
             document.getElementById(containerId).appendChild(renderer.domElement);
-            addGrid(scene, a0 * Npoints, Npoints / 4);
-            addPoints(scene, points);
             renderer.render(scene, camera);
             return { renderer, camera, scene };
-        }
-
-        function drawOnScene(scn, wires) {
-            addWires(scn, wires);    
         }
 
         function addGrid(scene, size, divisions) {
@@ -129,19 +294,21 @@
             scene.add(gridHelper);
         }
 
-        function addPoints(scene, points) {
-            const pointGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+        function addPoints(scene, points, sz = 0.8, add_to_mesh = false) {
+            const pointGeometry = new THREE.SphereGeometry(sz, 16, 16);
             const pointMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
             points.forEach(point => {
                 const mesh = new THREE.Mesh(pointGeometry, pointMaterial);
                 mesh.position.set(point.x, point.y, point.z);
                 scene.add(mesh);
+                if (add_to_mesh) {
+                    pointMeshes.push(mesh);
+                }
             });
             return;
         }
 
         function createWire(type, point, dtheta) {
-            const geometry = new THREE.BufferGeometry();
             const vertices = new Float32Array([
                 0, 0, 0,
                 type.length1 * Math.cos(type.angle1), 0, type.length1 * Math.sin(type.angle1),
@@ -149,14 +316,20 @@
                 0,
                 type.length1 * Math.sin(type.angle1) + type.length2 * Math.sin(type.angle2),
             ]);
-            geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-            const material = new THREE.LineBasicMaterial({ color: type.color, linewidth: 1 });
-            const line = new THREE.Line(geometry, material);
-            line.position.set(point.x, point.y, point.z);
             const randomRotation = dtheta * (Math.random() - 0.5) * Math.PI; // Random angle between 0 and 2π
-            line.rotateZ(randomRotation);
+            const geometry1 = new THREE.BufferGeometry();
+            geometry1.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            const line1 = new THREE.Line(geometry1, new THREE.LineBasicMaterial({ color: type.color, linewidth: 1 }));
+            line1.position.set(point.x, point.y, point.z);
+            line1.rotateZ(randomRotation);
+            const geometry2 = new THREE.BufferGeometry();
+            geometry2.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            const line2 = new THREE.Line(geometry2, new THREE.LineBasicMaterial({ color: type.color, linewidth: 1 }));
+            line2.position.set(point.x, point.y, point.z);
+            line2.rotateZ(randomRotation);
             return {
-                line: line,
+                line1: line1,
+                line2: line2,
                 type: type,
                 rotation: randomRotation,
                 position: point.clone()
@@ -172,15 +345,22 @@
             });
         }
 
-        function addWires(scene, wires) {
+        function addWires(scene1, scene2, wires) {
             wires.forEach(wire => {
-                scene.add(wire.line);
+                scene1.add(wire.line1);
+                scene2.add(wire.line2);
             });
         }
 
         function updateWireRotation(wire, r1) {
-            wire.line.rotation.z  = r1;
+            wire.line1.rotation.z  = r1;
+            wire.line2.rotation.z  = r1;
             wire.rotation = r1;
+        }
+
+        function updatePointColor(meshes, i, c) {
+            const x = 0.999 * Math.min(c, 1);
+            meshes[i].material.color.setRGB(1-x, 0, x); // Blue (cold) to Red (hot)
         }
 
         ///////////////////////////////////////////////
@@ -323,16 +503,44 @@
             return elasticEnergy + interactionEnergy + repulsion + 10.0 * springConstant * edge;
         }
 
-        const { renderer: renderer1, camera: camera1, scene: scene1 } = createScene('scene1', points, [0, -150*a0, 50*a0], [0, 1, -0.5], 50);
-        const { renderer: renderer2, camera: camera2, scene: scene2 } = createScene('scene2', points, [0, 0, 500*a0], [0, 0, -1], 15);
-        drawOnScene(scene1, wireObjects);
-        drawOnScene(scene2, wireObjects);
+        function calculateWireInteractionEnergy(wireIndex, wireObjects, neighborMap, PARAMS) {
+            const wire = wireObjects[wireIndex];
+            let interactionEnergy = 0;
+            for (let neighborIndex of neighborMap.get(wireIndex)) {
+                const neighborWire = wireObjects[neighborIndex];
+                const basePoint1 = new THREE.Vector2(wire.position.x, wire.position.y);
+                const endPoint1 = calculateWireEndPoint(wire);
+                const basePoint2 = new THREE.Vector2(neighborWire.position.x, neighborWire.position.y);
+                const endPoint2 = calculateWireEndPoint(neighborWire);
+                if (doLinesIntersect(basePoint1, endPoint1, basePoint2, endPoint2)) {
+                    const dth = wire.rotation - neighborWire.rotation;
+                    interactionEnergy += PARAMS.overlapPenalty + PARAMS.overlapPenalty * dth * dth;
+                }
+                interactionEnergy += computeRepulsionByDistance(wire, neighborWire, PARAMS.DM1, PARAMS.DM2, PARAMS.repulsionPenalty);
+            }
+            
+            return interactionEnergy;
+        }
+
+        ///////////////////////////////////////
+
+        const A1 = createScene('scene1', points, [0, -150, 50], [0, 1, -0.15], 50);
+        const A2 = createScene('scene2', points, [0, 0, 500], [0, 0, -1], 15);
+        addWires(A1.scene, A2.scene, wireObjects);
 
         let shouldRender = false;
         function renderCallback(simId, currentEnergy, temperature) {
             if (shouldRender) {
-                renderer1.render(scene1, camera1);
-                renderer2.render(scene2, camera2);
+                // Calculate interaction energies for all wires
+                const interactionEnergies = wireObjects.map((_, index) => 
+                    calculateWireInteractionEnergy(index, wireObjects, neighborMap, PARAMS)
+                );
+                const maxEnergy = Math.max(...interactionEnergies);
+                for (let i = 0; i < wireObjects.length; i++) {
+                    updatePointColor(pointMeshes, i, interactionEnergies[i]/maxEnergy);
+                }
+                A1.renderer.render(A1.scene, A1.camera);
+                A2.renderer.render(A2.scene, A2.camera);
                 shouldRender = false;
             }
             // Update the textbox with simulation information
@@ -341,7 +549,8 @@
             document.getElementById('temperature').textContent = temperature.toFixed(4);
         }
 
-        let annealingStep = 0;
+        var annealingStep = 0;
+
         async function simulatedAnnealing(PARAMS, wireObjects, neighborMap, dtheta = 0.01, T0 = 1000.0, coolingRate = 0.995, iterations = 1000) {
             const springConstant = PARAMS.springConstant;
             const overlapPenalty = PARAMS.overlapPenalty;
@@ -351,7 +560,7 @@
             let temperature = T0;
             let currentEnergy = calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty, DM1, DM2, wireObjects, neighborMap);
             for (let i = 0; i < iterations; i++) {
-                if (temperature < 1e-4) {
+                if (temperature < 1e-20) {
                     break;
                 }
                 // randomly choose a site in each iteration
@@ -384,7 +593,7 @@
                 // Update the scene every 100 iterations
                 // The rest part is not essential, only for visualization purpose 
                 annealingStep++;
-                if (annealingStep % 200 === 0) {
+                if (annealingStep % 500 === 0) {
                     shouldRender = true;
                     renderCallback(annealingStep, currentEnergy, temperature);
                     await new Promise(resolve => requestAnimationFrame(resolve));
@@ -393,37 +602,100 @@
             return currentEnergy;
         }
 
-        ////////////////////////////////////////////////
-        // Run the simulation
-        const PARAMS = {
-            springConstant: 100.0,
-            overlapPenalty: 80000,
-            repulsionPenalty: 40000,
-            DM1: 0.25*a0,
-            DM2: 0.25*a0,
-        };
 
-        async function runSimulations(numberOfSimulations) {
+        ///////////////////////////////////////////////////////
+        function extractWireTypes() {
+            const wireTypes = [
+            {
+                length1 : parseFloat(document.getElementById('greenLength1').value),
+                length2 : parseFloat(document.getElementById('greenLength2').value),
+                angle1 :  parseFloat(document.getElementById('greenAngle1').value) * Math.PI / 180,
+                angle2 :  parseFloat(document.getElementById('greenAngle2').value) * Math.PI / 180,
+                color  :  'green'
+            },
+            {
+                length1 : parseFloat(document.getElementById('redLength1').value),
+                length2 : parseFloat(document.getElementById('redLength2').value),
+                angle1 :  parseFloat(document.getElementById('redAngle1').value) * Math.PI / 180,
+                angle2 :  parseFloat(document.getElementById('redAngle2').value) * Math.PI / 180,
+                color  :  'red'
+            },
+            {
+                length1 : parseFloat(document.getElementById('blueLength1').value), 
+                length2 : parseFloat(document.getElementById('blueLength2').value),
+                angle1 :  parseFloat(document.getElementById('blueAngle1').value) * Math.PI / 180,
+                angle2 :  parseFloat(document.getElementById('blueAngle2').value) * Math.PI / 180,
+                color  :  'blue'
+            }];
+            wireTypes.forEach((wireType, index) => {
+                wireType.projectedLength = wireType.length1 * Math.cos(wireType.angle1) + wireType.length2 * Math.cos(wireType.angle2); 
+            });
+            return wireTypes;
+        }
+
+        function clearScene(scene) {
+            if (!scene) {
+                console.error('Scene is undefined');
+                return;
+            }
+            scene.traverse(function(object) {
+                if (object.type === 'Mesh') {
+                    object.geometry.dispose();
+                    object.material.dispose();
+                }
+            });
+            scene.children.length = 0;
+        }
+
+        function updateSimulation() {
+            // 
+            PARAMS = extractPARAMS();
+            // Update simulated annealing schedule
+            schedule = extractSimulationSchedule();
+            // 
+            wireTypes = extractWireTypes();
+            // Regenerate wires and restart simulation
+            wireObjects.length = 0;
+            genWires(points, wireTypes, 0.01);
+            //
+            clearScene(A1.scene);
+            clearScene(A2.scene);
+            pointMeshes.length = 0;
+            addPoints(A1.scene, points, 0.01, false);
+            addPoints(A2.scene, points, 0.3, true);
+            addGrid(A1.scene, Npoints, Npoints / 4);
+            addGrid(A2.scene, Npoints, Npoints / 4);
+            addWires(A1.scene, A2.scene, wireObjects); 
+            A1.renderer.render(A1.scene, A1.camera);
+            A2.renderer.render(A2.scene, A2.camera);
+        }
+        ///////////////////////////////////////////////////////
+
+        // Run the simulation
+        
+        async function runSimulations(numberOfSimulations, schedule) {
             annealingStep = 0;
             for (let i = 0; i < numberOfSimulations; i++) {
                 const En = await simulatedAnnealing(
                     PARAMS, 
                     wireObjects, 
                     neighborMap, 
-                    0.01 - i*0.008/numberOfSimulations, 
-                    1000.0 - i*800.0/numberOfSimulations, 
-                    0.9998, 
-                    400000 + 20000 * i
+                    schedule.amplitudes[i], 
+                    schedule.temperatures[i], 
+                    schedule.drop[i], 
+                    schedule.steps[i]
                 );
+                console.log("Simulation ", i, "annealingStep ", annealingStep, "energy: ", En);
                 if (En < 1e-2) {
                     break;
                 }
             }
         }
 
-        // Call the async function
-        runSimulations(10);
-
+        function startSimulation() {
+            updateSimulation();
+            runSimulations(schedule.temperatures.length, schedule);
+        }
 
     </script>
 </body>
