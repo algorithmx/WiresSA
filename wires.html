@@ -113,11 +113,11 @@
                     <th>Minimal distance 2</th>
                 </tr>
                 <tr>
-                    <td><input type="number" id="springConstant" value="1000.0"></td>
-                    <td><input type="number" id="overlapPenalty" value="80000"></td>
-                    <td><input type="number" id="repulsionPenalty" value="40000"></td>
-                    <td><input type="number" id="DM1" value="0.2" step="0.05"></td>
-                    <td><input type="number" id="DM2" value="0.8" step="0.05"></td>
+                    <td><input type="number" id="springConstant" value="100.0"></td>
+                    <td><input type="number" id="overlapPenalty" value="8000"></td>
+                    <td><input type="number" id="repulsionPenalty" value="4000"></td>
+                    <td><input type="number" id="DM1" value="0.0" step="0.05"></td>
+                    <td><input type="number" id="DM2" value="1.5" step="0.05"></td>
                 </tr>    
                 <tr>
                     <th colspan="4">Simulation Schedule</th>
@@ -131,7 +131,7 @@
                 <tr>
                     <td><input type="text" id="initialTemperatures" value="8000,8000,8000"></td>
                     <td><input type="text" id="totalSteps" value="500000,500000,500000"></td>
-                    <td><input type="text" id="amplitudes" value="0.05,0.05,0.02"></td>
+                    <td><input type="text" id="amplitudes" value="0.01,0.01,0.005"></td>
                     <td><input type="text" id="dropFactors" value="0.9999,0.9999,0.99995"></td>
                 </tr>
                 <tr>
@@ -184,10 +184,6 @@
 
         // Create L-shaped wires
         var wireTypes = extractWireTypes();
-        wireTypes.forEach((wireType, index) => {
-            wireType.projectedLength = wireType.length1 * Math.cos(wireType.angle1) + wireType.length2 * Math.cos(wireType.angle2);
-        });
-
         const points = [];
         for (let i = 0; i < Npoints; i++) {
             const x = (  - 0.4*Npoints) + 0.04*(Math.random() - 0.5);
@@ -349,8 +345,7 @@
 
         function updatePointColor(meshes, i, c) {
             const x = 0.999 * Math.min(c, 1);
-            meshes[i].material.color.setRGB(x, 0, 1-x); // Blue (cold) to Red (hot)
-            meshes[i].material.size = 0.8 * (1-x) + 0.4;
+            meshes[i].material.color.setRGB(x, 0.5*x, 0.8*x); // Blue (cold) to Red (hot)
             meshes[i].material.needsUpdate = true;
         }
 
@@ -366,20 +361,12 @@
         }
         
         function doLinesIntersect(p1, p2, p3, p4) {
-            const d1 = direction(p3, p4, p1);
-            const d2 = direction(p3, p4, p2);
-            if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))) {
-                const d3 = direction(p1, p2, p3);
-                const d4 = direction(p1, p2, p4);
-                if (((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        function direction(pi, pj, pk) {
-            return (pk.x - pi.x) * (pj.y - pi.y) - (pj.x - pi.x) * (pk.y - pi.y);
+            const d1 = (p4.x - p3.x) * (p1.y - p3.y) - (p4.y - p3.y) * (p1.x - p3.x);
+            const d2 = (p4.x - p3.x) * (p2.y - p3.y) - (p4.y - p3.y) * (p2.x - p3.x);
+            if ((d1 ^ d2) >= 0) return false;            
+            const d3 = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
+            const d4 = (p2.x - p1.x) * (p4.y - p1.y) - (p2.y - p1.y) * (p4.x - p1.x);
+            return (d3 ^ d4) < 0;
         }
 
         ///////////////////////////////////////////
@@ -401,27 +388,24 @@
         }
 
         function pointsOnWire(wireA) {
-            const a1 = new THREE.Vector3(0, 0, 0);
+            const c =  Math.cos(wireA.rotation);
+            const s =  Math.sin(wireA.rotation);
             const a2 = new THREE.Vector3(
-                wireA.type.length1 * Math.cos(wireA.type.angle1),
-                0,
-                wireA.type.length1 * Math.sin(wireA.type.angle1)
+                wireA.type.px * c + wireA.position.x,
+                wireA.type.px * s + wireA.position.y,
+                wireA.type.py
             );
-            a2.applyAxisAngle(new THREE.Vector3(0, 0, 1), wireA.rotation);
             const a3 = new THREE.Vector3(
-                a2.x + wireA.type.length2 * Math.cos(wireA.type.angle2),
-                0,
-                a2.z + wireA.type.length2 * Math.sin(wireA.type.angle2)
+                (wireA.type.px + wireA.type.qx) * c + wireA.position.x,
+                (wireA.type.px + wireA.type.qx) * s + wireA.position.y,
+                wireA.type.py + wireA.type.qy
             );
-            a3.applyAxisAngle(new THREE.Vector3(0, 0, 1), wireA.rotation);
-            a3.add(wireA.position);
-            a2.add(wireA.position);
-            a1.add(wireA.position);
+            const a1 = new THREE.Vector3(wireA.position.x, wireA.position.y, 0);
             return [a1,a2,a3];
         }
 
         function wireRepulsion(d, dmin, PENALTY = 1000) {
-            return d >= dmin ? 1.0/(1.0 + d*d) : PENALTY + PENALTY * (dmin - d) * (dmin - d);
+            return d >= dmin ? 0.0 : PENALTY + PENALTY * (dmin - d);
         }
 
         function computeRepulsionByDistance(wireA, wireB, DM1, DM2, PENALTY=1000) {
@@ -445,21 +429,19 @@
             for (let [i, neighbors] of neighborMap.entries()) {
                 const wire1 = wires[i];
                 for (let j of neighbors) {
-                    const wire2 = wires[j];
-                    totalRepulsionEnergy += computeRepulsionByDistance(wire1, wire2, DM1, DM2, PENALTY);
+                    totalRepulsionEnergy += computeRepulsionByDistance(wire1, wires[j], DM1, DM2, PENALTY);
                 }
             }        
             return totalRepulsionEnergy;
         }
 
-        function calculateElasticEnergy(springConstant, wireObjects, neighborMap) {
+        function calculateElasticEnergy(wireObjects, neighborMap) {
             let totalElasticEnergy = 0;
             for (let [index, neighbors] of neighborMap.entries()) {
                 const wire = wireObjects[index];
                 for (let neighborIndex of neighbors) {
-                    const neighborWire = wireObjects[neighborIndex];
-                    const angleDiff = wire.rotation - neighborWire.rotation;
-                    totalElasticEnergy += springConstant * angleDiff * angleDiff;
+                    const angleDiff = wire.rotation - wireObjects[neighborIndex].rotation;
+                    totalElasticEnergy += angleDiff * angleDiff;
                 }
             }
             return totalElasticEnergy;
@@ -469,15 +451,13 @@
             let totalOverlapEnergy = 0;
             for (let [i, neighbors] of neighborMap.entries()) {
                 const wire1 = wireObjects[i];
-                const basePoint1 = wire1.position;
                 const endPoint1 = calculateWireEndPoint(wire1);
                 for (let j of neighbors) {
                     const wire2 = wireObjects[j];
-                    const basePoint2 = wire2.position;
                     const endPoint2 = calculateWireEndPoint(wire2);
-                    if (doLinesIntersect(basePoint1, endPoint1, basePoint2, endPoint2)) {
+                    if (doLinesIntersect(wire1.position, endPoint1, wire2.position, endPoint2)) {
                         const dth = wire1.rotation - wire2.rotation;
-                        totalOverlapEnergy += overlapPenalty + overlapPenalty * dth * dth;
+                        totalOverlapEnergy += overlapPenalty + overlapPenalty * Math.abs(dth);
                     }
                 }
             }
@@ -485,32 +465,39 @@
         }
 
         function calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty,  DM1, DM2, wireObjects, neighborMap) {
-            const elasticEnergy = calculateElasticEnergy(springConstant, wireObjects, neighborMap);
+            const elasticEnergy = calculateElasticEnergy(wireObjects, neighborMap);
             const interactionEnergy = calculateOverlapEnergy(overlapPenalty, wireObjects, neighborMap);
             const repulsion = calculateWireRepulsionEnergy(DM1, DM2, repulsionPenalty, wireObjects);
             const edge = calculateEdgeWirePotential(wireObjects);
-            return elasticEnergy + interactionEnergy + repulsion + 10.0 * springConstant * edge;
+            return elasticEnergy + springConstant * interactionEnergy + repulsion + 10.0 * springConstant * edge;
         }
 
         function calculateWireInteractionEnergy(wireIndex, wireObjects, neighborMap, PARAMS) {
             const wire = wireObjects[wireIndex];
             let interactionEnergy = 0;
+            console.log("Wire index: ", wireIndex);
+            console.log("Neighbor: ", neighborMap);
             for (let neighborIndex of neighborMap.get(wireIndex)) {
                 const neighborWire = wireObjects[neighborIndex];
-                const basePoint1 = new THREE.Vector2(wire.position.x, wire.position.y);
+                // Elastic energy
+                const dth = wire.rotation - neighborWire.rotation;
+                interactionEnergy += PARAMS.springConstant * dth * dth;
+                // Overlap energy
                 const endPoint1 = calculateWireEndPoint(wire);
-                const basePoint2 = new THREE.Vector2(neighborWire.position.x, neighborWire.position.y);
                 const endPoint2 = calculateWireEndPoint(neighborWire);
-                if (doLinesIntersect(basePoint1, endPoint1, basePoint2, endPoint2)) {
-                    const dth = wire.rotation - neighborWire.rotation;
-                    interactionEnergy += PARAMS.overlapPenalty + PARAMS.overlapPenalty * dth * dth;
+                if (doLinesIntersect(wire.position, endPoint1, neighborWire.position, endPoint2)) {
+                    interactionEnergy += PARAMS.overlapPenalty + PARAMS.overlapPenalty * Math.abs(dth);
                 }
+                // Repulsion energy
                 interactionEnergy += computeRepulsionByDistance(wire, neighborWire, PARAMS.DM1, PARAMS.DM2, PARAMS.repulsionPenalty);
+                // Edge wire potential (only for uppermost and lowermost wires)
+                if (wireIndex === uppermost || wireIndex === lowermost) {
+                    interactionEnergy += 100.0 * PARAMS.springConstant * wire.rotation * wire.rotation;
+                }
             }
-            
             return interactionEnergy;
         }
-
+        
         ///////////////////////////////////////
 
         const A1 = createScene('scene1', points, [0, -150, 50], [0, 1, -0.15], 50);
@@ -522,9 +509,9 @@
             if (shouldRender) {
                 // Calculate interaction energies for all wires
                 const interactionEnergies = wireObjects.map((_, index) => 
-                    Math.log(1 + calculateWireInteractionEnergy(index, wireObjects, neighborMap, PARAMS))
+                    Math.abs(calculateWireInteractionEnergy(index, wireObjects, neighborMap, PARAMS))
                 );
-                const maxEnergy = Math.max(...interactionEnergies);
+                const maxEnergy = Math.max(...interactionEnergies) + 1e-5;
                 for (let i = 0; i < wireObjects.length; i++) {
                     const v = interactionEnergies[i] / maxEnergy;
                     updatePointColor(pointMeshes, i, v);
@@ -539,6 +526,45 @@
             document.getElementById('temperature').textContent = temperature.toFixed(4);
         }
 
+        function calculateWireEnergies(wireEnergies, wireObjects, neighborMap, PARAMS) {
+            wireObjects.forEach((wire, index) => {
+                    wireEnergies[index] = calculateWireInteractionEnergy(index, wireObjects, neighborMap, PARAMS)
+            });
+        }
+
+        function updateWireEnergies(deltas, wireEnergies) {
+            deltas.forEach(delta => {
+                wireEnergies[delta[0]] += delta[1];
+            });
+            return;
+        }
+
+        function deltaWireEnergies(updatedEnergies, wireIndex, wireEnergies, wireObjects, neighborMap, PARAMS) {
+            updatedEnergies.length = 0;
+            updatedEnergies.push([
+                wireIndex, 
+                calculateWireInteractionEnergy(wireIndex, wireObjects, neighborMap, PARAMS) - wireEnergies[wireIndex]
+            ]);
+            for (let neighborIndex of neighborMap.get(wireIndex)) {
+                updatedEnergies.push([
+                    neighborIndex, 
+                    calculateWireInteractionEnergy(neighborIndex, wireObjects, neighborMap, PARAMS) - wireEnergies[neighborIndex]
+                ]);
+            }
+            return;
+        }
+
+        function selectWireBasedOnEnergy(wireEnergies) {
+            const tot = wireEnergies.reduce((sum, energy) => sum + Math.log(1 + energy), 0);
+            let randomEnergy = Math.random() * tot;
+            let selectedWireIndex = 0;
+            for (; selectedWireIndex < wireEnergies.length; selectedWireIndex++) {
+                randomEnergy -= Math.log(1 + wireEnergies[selectedWireIndex]);
+                if (randomEnergy <= 0) break;
+            }
+            return selectedWireIndex;
+        }
+
         var annealingStep = 0;
 
         async function simulatedAnnealing(PARAMS, wireObjects, neighborMap, dtheta = 0.01, T0 = 1000.0, coolingRate = 0.995, iterations = 1000) {
@@ -548,13 +574,18 @@
             const DM1 = PARAMS.DM1;
             const DM2 = PARAMS.DM2;
             let temperature = T0;
-            let currentEnergy = calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty, DM1, DM2, wireObjects, neighborMap);
+            let wireEnergies = new Array(wireObjects.length).fill(0);
+            calculateWireEnergies(wireEnergies, wireObjects, neighborMap, PARAMS);
+            let currentEnergy = wireEnergies.reduce((sum, energy) => sum + energy, 0);
+            let dE = [];
+            // calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty, DM1, DM2, wireObjects, neighborMap);
             for (let i = 0; i < iterations; i++) {
-                if (temperature < 1e-8) {
+                if (temperature < 1e-8 || currentEnergy < 0.01) {
                     break;
                 }
                 // randomly choose a site in each iteration
-                const randomWireIndex = Math.floor(Math.random() * wireObjects.length);
+                // const randomWireIndex = Math.floor(Math.random() * wireObjects.length);
+                const randomWireIndex = selectWireBasedOnEnergy(wireEnergies);
                 const originalRotation = wireObjects[randomWireIndex].rotation;
                 // random update
                 let newRotation = originalRotation + (2 * Math.random() - 1) * dtheta;
@@ -568,11 +599,14 @@
                 // Monte Carlo, Metropolis-Hastings algorithm
                 // propose
                 updateWireRotation(wireObjects[randomWireIndex], newRotation);
-                const newEnergy = calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty, DM1, DM2, wireObjects, neighborMap);
+                deltaWireEnergies(dE, randomWireIndex, wireEnergies, wireObjects, neighborMap, PARAMS);
+                const dETotal = dE.reduce((sum, delta) => sum + delta[1], 0);
+                // calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty, DM1, DM2, wireObjects, neighborMap);
                 // Metropolis-Hastings criterion
-                if (Math.random() < Math.exp((currentEnergy - newEnergy) / temperature)) {
+                if (Math.random() < Math.exp(-dETotal / temperature)) {
                     // accept, update energy
-                    currentEnergy = newEnergy;
+                    currentEnergy += dETotal;
+                    updateWireEnergies(dE, wireEnergies);
                 } else {
                     // rejected, roll back
                     updateWireRotation(wireObjects[randomWireIndex], originalRotation);
@@ -584,6 +618,10 @@
                 // The rest part is not essential, only for visualization purpose 
                 annealingStep++;
                 if (annealingStep % 500 === 0) {
+                    // recalculate
+                    calculateWireEnergies(wireEnergies, wireObjects, neighborMap, PARAMS);
+                    currentEnergy = wireEnergies.reduce((sum, energy) => sum + energy, 0);
+                    // render
                     shouldRender = true;
                     renderCallback(annealingStep, currentEnergy, temperature);
                     await new Promise(resolve => requestAnimationFrame(resolve));
@@ -618,7 +656,11 @@
                 color  :  'blue'
             }];
             wireTypes.forEach((wireType, index) => {
-                wireType.projectedLength = wireType.length1 * Math.cos(wireType.angle1) + wireType.length2 * Math.cos(wireType.angle2); 
+                wireType.projectedLength = wireType.length1 * Math.cos(wireType.angle1) + wireType.length2 * Math.cos(wireType.angle2);
+                wireType.px = wireType.length1 * Math.cos(wireType.angle1);
+                wireType.py = wireType.length1 * Math.sin(wireType.angle1);
+                wireType.qx = wireType.length2 * Math.cos(wireType.angle2);
+                wireType.qy = wireType.length2 * Math.sin(wireType.angle2);
             });
             return wireTypes;
         }
@@ -646,13 +688,13 @@
             wireTypes = extractWireTypes();
             // Regenerate wires and restart simulation
             wireObjects.length = 0;
-            genWires(points, wireTypes, 0.005 * Math.PI);
+            genWires(points, wireTypes, 0.0005 * Math.PI);
             //
             clearScene(A1.scene);
             clearScene(A2.scene);
             pointMeshes.length = 0;
             addPoints(A1.scene, points, 0.01, false);
-            addPoints(A2.scene, points, 0.3, true);
+            addPoints(A2.scene, points, 0.5, true);
             addGrid(A1.scene, Npoints, Npoints / 4);
             addGrid(A2.scene, Npoints, Npoints / 4);
             addWires(A1.scene, A2.scene, wireObjects); 
@@ -662,7 +704,6 @@
         ///////////////////////////////////////////////////////
 
         // Run the simulation
-        
         async function runSimulations(numberOfSimulations, schedule) {
             annealingStep = 0;
             for (let i = 0; i < numberOfSimulations; i++) {
@@ -676,7 +717,7 @@
                     schedule.steps[i]
                 );
                 console.log("Simulation ", i, "annealingStep ", annealingStep, "energy: ", En);
-                if (En < 1e-2) {
+                if (En < 0.01) {
                     break;
                 }
             }
