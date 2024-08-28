@@ -89,6 +89,14 @@
             height: 100%;
         }
 
+        .scrollable-div {
+            width: 400px;
+            height: 200px;
+            overflow: auto; /* Ensures scrollbars appear when content overflows */
+            padding: 5px; /* Optional: adds padding inside the div */
+            max-height: 200px; 
+            overflow-y: auto;
+        }
     </style>
 </head>
 
@@ -127,12 +135,14 @@
                     <th>Total Steps</th>
                     <th>Amplitudes</th>
                     <th>Temperature Drop Factors</th>
+                    <th>Initial Rotation (pi)</th>
                 </tr>
                 <tr>
                     <td><input type="text" id="initialTemperatures" value="8000,8000,8000"></td>
                     <td><input type="text" id="totalSteps" value="500000,500000,500000"></td>
                     <td><input type="text" id="amplitudes" value="0.01,0.01,0.005"></td>
                     <td><input type="text" id="dropFactors" value="0.9999,0.9999,0.99995"></td>
+                    <td><input type="number" id="initialRotation" value="0.001" step="0.0001"></td>
                 </tr>
                 <tr>
                     <th colspan="3">Wire Types</th>
@@ -172,13 +182,22 @@
         <div id="simulationInfo" style="position: fixed; top: 5px; right: 5px">
             <p>Simulation ID: <span id="simId"></span></p>
             <p>Current Energy: <span id="currentEnergy"></span></p>
+            <p>Edge Energy: <span id="edgeEnergy"></span></p>
             <p>Temperature: <span id="temperature"></span></p>
         </div>
+
+        <div id="distanceData" style="position: fixed; bottom: 1px; left: 1px; background-color: rgba(0,0,0,0.1); padding: 1px; ">
+            <h3>Initial Wire Distances</h3>
+            <pre id="distanceDataContent" class="scrollable-div"></pre>
+        </div>
+        
     </div>
+
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         const Npoints = 100;
+        const point_randomness = 0.01;
         var schedule = extractSimulationSchedule();
         var PARAMS = extractPARAMS();
 
@@ -186,13 +205,13 @@
         var wireTypes = extractWireTypes();
         const points = [];
         for (let i = 0; i < Npoints; i++) {
-            const x = (  - 0.4*Npoints) + 0.04*(Math.random() - 0.5);
-            const y = (i - 0.5*Npoints) + 1 + 0.04*(Math.random() - 0.5); 
+            const x = (  - 0.4*Npoints) + point_randomness*(Math.random() - 0.5);
+            const y = (i - 0.5*Npoints) + 1 + point_randomness*(Math.random() - 0.5); 
             const z = 0;
             points.push(new THREE.Vector3(x, y, z));
         }
         const pointMeshes = [];
-        const neighborMap = buildNeighborMap(points, 1.8);
+        const neighborMap = buildNeighborMap(points, 3.5);
         const [uppermost, lowermost] = findEdgePointIndex(points);
         const wireObjects = [];
 
@@ -202,7 +221,8 @@
                 overlapPenalty : parseFloat(document.getElementById('overlapPenalty').value),
                 repulsionPenalty : parseFloat(document.getElementById('repulsionPenalty').value),
                 DM1 : parseFloat(document.getElementById('DM1').value),
-                DM2 : parseFloat(document.getElementById('DM2').value)
+                DM2 : parseFloat(document.getElementById('DM2').value),
+                initialRotation: parseFloat(document.getElementById('initialRotation').value)
             };
         }
 
@@ -345,10 +365,30 @@
 
         function updatePointColor(meshes, i, c) {
             const x = 0.999 * Math.min(c, 1);
-            meshes[i].material.color.setRGB(x, 0.5*x, 0.8*x); // Blue (cold) to Red (hot)
+            meshes[i].material.color.setRGB(x, 0.4*x, 0.3*x); // Blue (cold) to Red (hot)
             meshes[i].material.needsUpdate = true;
         }
 
+        function calculateInitialWireDistances(wireObjects, neighborMap) {
+            let distanceData = [];
+            for (let [i, neighbors] of neighborMap.entries()) {
+                const wireA = wireObjects[i];
+                for (let j of neighbors) {
+                    const wireB = wireObjects[j];
+                    const [a1, a2, a3] = pointsOnWire(wireA);
+                    const [b1, b2, b3] = pointsOnWire(wireB);
+                    const distances = [
+                        distSegToSeg(a1, a2, b1, b2),
+                        distSegToSeg(a1, a2, b2, b3),
+                        distSegToSeg(a2, a3, b1, b2),
+                        distSegToSeg(a2, a3, b2, b3)
+                    ];
+                    distanceData.push(`[${i}]-[${j}] ${distances.map(d => d.toFixed(2)).join(', ')}`);
+                }
+            }
+            return distanceData.join('\n');
+        }
+        
         ///////////////////////////////////////////////
         // Energy
 
@@ -371,20 +411,77 @@
 
         ///////////////////////////////////////////
 
-        function distSegToSeg(p1,p2,q1,q2) {
-            const u = p2.clone().sub(p1);
-            const v = q2.clone().sub(q1);
-            const w = q1.clone().sub(p1);
-            const uxv = u.clone().cross(v);
-            const uxv_mag = uxv.length();
-            // If the cross product is zero, the segments are parallel
-            if (uxv_mag === 0) {
-                // Compute the distance between the parallel segments
-                return Math.abs(w.clone().cross(u).length()) / u.length();
-            } else {
-                // Compute the distance using the cross product method
-                return Math.abs(w.dot(uxv)) / uxv_mag;
+        function distSegToSeg(p1, q1, p2, q2) {
+            const d1 = q1.clone().sub(p1);
+            const d2 = q2.clone().sub(p2);
+            const r = p1.clone().sub(p2);
+            const a = d1.dot(d1);
+            const e = d2.dot(d2);
+            if (a < 1e-16 && e < 1e-16) {
+                return p1.distanceTo(p2);
             }
+            const f = d2.dot(r);
+            if (a < 1e-16) {
+                if (f >= 0 && f <= e) {
+                    return p1.distanceTo(p2.clone().add(d2.multiplyScalar(f/e)));
+                }
+                return Math.min(p1.distanceTo(q2), p1.distanceTo(p2));
+            }
+            const c = d1.dot(r);
+            if (e < 1e-16) {
+                if (c >= 0 && c <= a) {
+                    return p2.distanceTo(p1.clone().add(d1.multiplyScalar(c/a)));
+                }
+                return Math.min(q1.distanceTo(p2), p1.distanceTo(p2));
+            }
+            const b = d1.distanceTo(d2);
+            const denom = a * e - b * b;
+            let sN, sD = denom;
+            let tN, tD = denom;
+            if (denom <= 0) {
+                sN = 0;
+                sD = 1;
+                tN = f;
+                tD = e;
+            } else {
+                sN = b * f - c * e;
+                tN = a * f - b * c;
+                if (sN <= 0) {
+                    sN = 0;
+                    tN = f;
+                    tD = e;
+                } else if (sN >= sD) {
+                    sN = sD;
+                    tN = f + b;
+                    tD = e;
+                }
+            }
+        
+            if (tN <= 0) {
+                tN = 0;
+                if (-c <= 0) {
+                    sN = 0;
+                } else if (-c >= a) {
+                    sN = sD;
+                } else {
+                    sN = -c;
+                    sD = a;
+                }
+            } else if (tN >= tD) {
+                tN = tD;
+                if (-c + b <= 0) {
+                    sN = 0;
+                } else if (-c + b >= a) {
+                    sN = sD;
+                } else {
+                    sN = -c + b;
+                    sD = a;
+                }
+            }
+            const sc = sN / sD;
+            const tc = tN / tD;
+            const dP = r.add(d1.multiplyScalar(sc)).sub(d2.multiplyScalar(tc));
+            return dP.length();
         }
 
         function pointsOnWire(wireA) {
@@ -474,16 +571,14 @@
 
         function calculateWireInteractionEnergy(wireIndex, wireObjects, neighborMap, PARAMS) {
             const wire = wireObjects[wireIndex];
+            const endPoint1 = calculateWireEndPoint(wire);
             let interactionEnergy = 0;
-            console.log("Wire index: ", wireIndex);
-            console.log("Neighbor: ", neighborMap);
             for (let neighborIndex of neighborMap.get(wireIndex)) {
                 const neighborWire = wireObjects[neighborIndex];
                 // Elastic energy
                 const dth = wire.rotation - neighborWire.rotation;
                 interactionEnergy += PARAMS.springConstant * dth * dth;
                 // Overlap energy
-                const endPoint1 = calculateWireEndPoint(wire);
                 const endPoint2 = calculateWireEndPoint(neighborWire);
                 if (doLinesIntersect(wire.position, endPoint1, neighborWire.position, endPoint2)) {
                     interactionEnergy += PARAMS.overlapPenalty + PARAMS.overlapPenalty * Math.abs(dth);
@@ -492,7 +587,7 @@
                 interactionEnergy += computeRepulsionByDistance(wire, neighborWire, PARAMS.DM1, PARAMS.DM2, PARAMS.repulsionPenalty);
                 // Edge wire potential (only for uppermost and lowermost wires)
                 if (wireIndex === uppermost || wireIndex === lowermost) {
-                    interactionEnergy += 100.0 * PARAMS.springConstant * wire.rotation * wire.rotation;
+                    interactionEnergy += 10.0 * PARAMS.springConstant * wire.rotation * wire.rotation;
                 }
             }
             return interactionEnergy;
@@ -505,7 +600,7 @@
         addWires(A1.scene, A2.scene, wireObjects);
 
         let shouldRender = false;
-        function renderCallback(simId, currentEnergy, temperature) {
+        function renderCallback(simId, currentEnergy, edgeEnergy, temperature) {
             if (shouldRender) {
                 // Calculate interaction energies for all wires
                 const interactionEnergies = wireObjects.map((_, index) => 
@@ -523,6 +618,7 @@
             // Update the textbox with simulation information
             document.getElementById('simId').textContent = simId;
             document.getElementById('currentEnergy').textContent = currentEnergy.toFixed(4);
+            document.getElementById('edgeEnergy').textContent = edgeEnergy.toFixed(4);
             document.getElementById('temperature').textContent = temperature.toFixed(4);
         }
 
@@ -603,7 +699,7 @@
                 const dETotal = dE.reduce((sum, delta) => sum + delta[1], 0);
                 // calculateTotalEnergy(springConstant, overlapPenalty, repulsionPenalty, DM1, DM2, wireObjects, neighborMap);
                 // Metropolis-Hastings criterion
-                if (Math.random() < Math.exp(-dETotal / temperature)) {
+                if (Math.random() < Math.exp(- dETotal / temperature)) {
                     // accept, update energy
                     currentEnergy += dETotal;
                     updateWireEnergies(dE, wireEnergies);
@@ -617,13 +713,14 @@
                 // Update the scene every 100 iterations
                 // The rest part is not essential, only for visualization purpose 
                 annealingStep++;
-                if (annealingStep % 500 === 0) {
+                if (annealingStep % 2000 === 0) {
                     // recalculate
                     calculateWireEnergies(wireEnergies, wireObjects, neighborMap, PARAMS);
                     currentEnergy = wireEnergies.reduce((sum, energy) => sum + energy, 0);
+                    const edgeEnergy = 10.0 * springConstant * calculateEdgeWirePotential(wireObjects);
                     // render
                     shouldRender = true;
-                    renderCallback(annealingStep, currentEnergy, temperature);
+                    renderCallback(annealingStep, currentEnergy, edgeEnergy, temperature);
                     await new Promise(resolve => requestAnimationFrame(resolve));
                 }
             }
@@ -688,7 +785,7 @@
             wireTypes = extractWireTypes();
             // Regenerate wires and restart simulation
             wireObjects.length = 0;
-            genWires(points, wireTypes, 0.0005 * Math.PI);
+            genWires(points, wireTypes, PARAMS.initialRotation * Math.PI);
             //
             clearScene(A1.scene);
             clearScene(A2.scene);
@@ -698,6 +795,9 @@
             addGrid(A1.scene, Npoints, Npoints / 4);
             addGrid(A2.scene, Npoints, Npoints / 4);
             addWires(A1.scene, A2.scene, wireObjects); 
+            
+            document.getElementById('distanceDataContent').textContent = calculateInitialWireDistances(wireObjects, neighborMap);
+
             A1.renderer.render(A1.scene, A1.camera);
             A2.renderer.render(A2.scene, A2.camera);
         }
